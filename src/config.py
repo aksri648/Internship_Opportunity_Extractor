@@ -14,6 +14,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHANNELS_FILE = os.path.join(BASE_DIR, "channels.json")
 STATE_FILE = os.path.join(BASE_DIR, "state.json")
+BATCH_STATE_FILE = os.path.join(BASE_DIR, "batch_state.json")
 
 REQUIRED_VARS = {
     "GROQ_API_KEY": GROQ_API_KEY,
