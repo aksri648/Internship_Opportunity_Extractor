@@ -1,0 +1,8 @@
+feedparser
+yt-dlp
+youtube-transcript-api
+groq
+requests
+python-dotenv
+pydantic
+tenacity
