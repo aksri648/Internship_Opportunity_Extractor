@@ -1,5 +1,6 @@
 import logging
 
+from swiftshadow import QuickProxy
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
@@ -7,12 +8,34 @@ from youtube_transcript_api._errors import (
     NoTranscriptFound,
     TranscriptsDisabled,
 )
+from youtube_transcript_api.proxies import GenericProxyConfig
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_LANGUAGES = ["en", "hi", "en-IN"]
 
-ytt_api = YouTubeTranscriptApi()
+
+def _get_proxy_config():
+    try:
+        proxy = QuickProxy(protocol="https")
+        if proxy.ip and proxy.port:
+            http_url = f"http://{proxy.ip}:{proxy.port}"
+            https_url = f"http://{proxy.ip}:{proxy.port}"
+            logger.info("Using proxy %s:%s", proxy.ip, proxy.port)
+            return GenericProxyConfig(
+                http_url=http_url,
+                https_url=https_url,
+            )
+    except Exception as e:
+        logger.warning("Failed to get proxy, using direct connection: %s", e)
+    return None
+
+
+def _create_api():
+    proxy_config = _get_proxy_config()
+    if proxy_config:
+        return YouTubeTranscriptApi(proxy_config=proxy_config)
+    return YouTubeTranscriptApi()
 
 
 @retry(
@@ -22,7 +45,8 @@ ytt_api = YouTubeTranscriptApi()
     reraise=True,
 )
 def _fetch_transcript(video_id: str) -> list:
-    fetched = ytt_api.fetch(video_id, languages=SUPPORTED_LANGUAGES)
+    api = _create_api()
+    fetched = api.fetch(video_id, languages=SUPPORTED_LANGUAGES)
     return fetched.to_raw_data()
 
 
