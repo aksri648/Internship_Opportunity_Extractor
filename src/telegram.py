@@ -9,38 +9,55 @@ from .models import Opportunity
 logger = logging.getLogger(__name__)
 
 CONFIDENCE_FILTER = {"high", "medium"}
-MAX_MESSAGE_LENGTH = 4000
+MAX_MESSAGE_LENGTH = 4096
 
 
-def format_message(
+def _format_opportunity(i: int, opp: Opportunity) -> str:
+    batches = ", ".join(opp.eligible_batches)
+    link = opp.application_link if opp.application_link else "Not available"
+    return (
+        f"\n{i}️⃣ {opp.job_title}\n"
+        f"\n"
+        f"Company: {opp.company}\n"
+        f"\n"
+        f"Eligible Batch: {batches if batches else 'Not specified'}\n"
+        f"\n"
+        f"Apply: {link}\n"
+        f"\n"
+        f"─" * 10
+    )
+
+
+def _build_messages(
     opportunities: list[Opportunity], channel_name: str, video_title: str, video_id: str
-) -> str:
-    lines = [
-        "🚨 New Opportunities Found",
-        "",
-        f"Channel: {channel_name}",
-        f"Video: {video_title}",
-        "",
-        "─" * 10,
-    ]
+) -> list[str]:
+    header = (
+        f"🚨 New Opportunities Found\n"
+        f"\n"
+        f"Channel: {channel_name}\n"
+        f"Video: {video_title}\n"
+        f"\n"
+        f"─" * 10
+    )
+    footer = f"\n\nVideo URL: https://youtube.com/watch?v={video_id}"
 
-    for i, opp in enumerate(opportunities, 1):
-        batches = ", ".join(opp.eligible_batches)
+    if not opportunities:
+        return [header + footer]
 
-        lines.append("")
-        lines.append(f"{i}️⃣ {opp.job_title}")
-        lines.append(f"")
-        lines.append(f"Company: {opp.company}")
-        lines.append(f"")
-        lines.append(f"Eligible Batch: {batches if batches else 'Not specified'}")
-        lines.append(f"")
-        lines.append(f"Apply: {opp.application_link if opp.application_link else 'Not available'}")
-        lines.append("")
-        lines.append("─" * 10)
+    opp_texts = [_format_opportunity(i, opp) for i, opp in enumerate(opportunities, 1)]
 
-    lines.append("")
-    lines.append(f"Video URL: https://youtube.com/watch?v={video_id}")
-    return "\n".join(lines)
+    messages = []
+    current = header
+    for text in opp_texts:
+        if len(current) + len(text) > MAX_MESSAGE_LENGTH - len(footer):
+            messages.append(current)
+            current = text
+        else:
+            current += text
+    current += footer
+    messages.append(current)
+
+    return messages
 
 
 def filter_opportunities(opportunities: list[Opportunity]) -> list[Opportunity]:
@@ -68,7 +85,7 @@ def _send_request(message: str) -> bool:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": _get_chat_id(),
-        "text": message[:MAX_MESSAGE_LENGTH],
+        "text": message,
         "disable_web_page_preview": True,
     }
     response = requests.post(url, json=payload, timeout=30)
@@ -78,10 +95,12 @@ def _send_request(message: str) -> bool:
     return True
 
 
-def send_telegram(message: str) -> bool:
+def send_telegram(opportunities: list[Opportunity], channel_name: str, video_title: str, video_id: str) -> bool:
+    messages = _build_messages(opportunities, channel_name, video_title, video_id)
     try:
-        _send_request(message)
-        logger.info("Telegram notification sent successfully")
+        for msg in messages:
+            _send_request(msg)
+        logger.info("Telegram notification sent successfully (%d message(s))", len(messages))
         return True
     except Exception as e:
         logger.error("Telegram send error: %s", e)

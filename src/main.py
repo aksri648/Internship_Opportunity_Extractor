@@ -6,7 +6,7 @@ from .youtube import load_channels, get_new_videos
 from .youtube_api import get_video_description
 from .transcript import get_transcript
 from .extractor import extract_opportunities
-from .telegram import format_message, filter_opportunities, send_telegram
+from .telegram import filter_opportunities, send_telegram
 from .state import load_state, save_state
 
 
@@ -70,11 +70,8 @@ def run() -> None:
             logger.info("Found %d valid opportunity(ies)", len(filtered))
 
             channel_title = description_data.get("channel_name", channel_name)
-            message = format_message(
-                filtered, channel_title, video["title"], video_id
-            )
 
-            if send_telegram(message):
+            if send_telegram(filtered, channel_title, video["title"], video_id):
                 state[channel_id] = video_id
                 save_state(state)
                 logger.info("State updated to %s", video_id)
