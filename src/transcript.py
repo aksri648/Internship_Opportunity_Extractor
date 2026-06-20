@@ -2,7 +2,7 @@ import logging
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._api import (
+from youtube_transcript_api._errors import (
     CouldNotRetrieveTranscript,
     NoTranscriptFound,
     TranscriptsDisabled,
@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_LANGUAGES = ["en", "hi", "en-IN"]
 
+ytt_api = YouTubeTranscriptApi()
+
 
 @retry(
     stop=stop_after_attempt(3),
@@ -19,10 +21,9 @@ SUPPORTED_LANGUAGES = ["en", "hi", "en-IN"]
     retry=retry_if_exception_type(Exception),
     reraise=True,
 )
-def _fetch_transcript(video_id: str) -> list[dict]:
-    return YouTubeTranscriptApi.get_transcript(
-        video_id, languages=SUPPORTED_LANGUAGES
-    )
+def _fetch_transcript(video_id: str) -> list:
+    fetched = ytt_api.fetch(video_id, languages=SUPPORTED_LANGUAGES)
+    return fetched.to_raw_data()
 
 
 def get_transcript(video_id: str) -> str:
