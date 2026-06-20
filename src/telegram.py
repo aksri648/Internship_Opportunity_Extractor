@@ -16,15 +16,10 @@ def _format_opportunity(i: int, opp: Opportunity) -> str:
     batches = ", ".join(opp.eligible_batches)
     link = opp.application_link if opp.application_link else "Not available"
     return (
-        f"\n{i}️⃣ {opp.job_title}\n"
-        f"\n"
+        f"\n{i}. {opp.job_title}\n"
         f"Company: {opp.company}\n"
-        f"\n"
-        f"Eligible Batch: {batches if batches else 'Not specified'}\n"
-        f"\n"
+        f"Batch: {batches if batches else 'Not specified'}\n"
         f"Apply: {link}\n"
-        f"\n"
-        f"─" * 10
     )
 
 
@@ -33,13 +28,10 @@ def _build_messages(
 ) -> list[str]:
     header = (
         f"🚨 New Opportunities Found\n"
-        f"\n"
         f"Channel: {channel_name}\n"
         f"Video: {video_title}\n"
-        f"\n"
-        f"─" * 10
     )
-    footer = f"\n\nVideo URL: https://youtube.com/watch?v={video_id}"
+    footer = f"\nVideo URL: https://youtube.com/watch?v={video_id}"
 
     if not opportunities:
         return [header + footer]
@@ -64,7 +56,7 @@ def filter_opportunities(opportunities: list[Opportunity]) -> list[Opportunity]:
     seen = set()
     unique = []
     for opp in opportunities:
-        key = (opp.job_title.lower(), opp.company.lower())
+        key = (opp.job_title.strip().lower(), opp.company.strip().lower())
         if key not in seen:
             seen.add(key)
             if opp.confidence.lower() in CONFIDENCE_FILTER and opp.application_link and opp.job_title:
