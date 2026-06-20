@@ -1,9 +1,7 @@
 feedparser
-youtube-transcript-api
 google-api-python-client
 groq
 requests
 python-dotenv
 pydantic
 tenacity
-swiftshadow
