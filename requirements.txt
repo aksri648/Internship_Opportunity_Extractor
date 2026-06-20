@@ -1,6 +1,6 @@
 feedparser
-yt-dlp
 youtube-transcript-api
+google-api-python-client
 groq
 requests
 python-dotenv

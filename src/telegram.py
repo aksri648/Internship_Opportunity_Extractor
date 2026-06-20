@@ -1,51 +1,80 @@
+import logging
+
 import requests
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from .config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from .models import Opportunity
+
+logger = logging.getLogger(__name__)
+
+CONFIDENCE_FILTER = {"high", "medium"}
 
 
-def format_message(opportunities: list[dict], channel_name: str, video_url: str) -> str:
-    lines = ["🚨 New Opportunities Found", f"📺 Channel: {channel_name}", "─" * 20]
+def format_message(
+    opportunities: list[Opportunity], channel_name: str, video_title: str, video_id: str
+) -> str:
+    lines = [
+        "🚨 New Opportunities Found",
+        "",
+        f"Channel: {channel_name}",
+        f"Video: {video_title}",
+        "",
+        "─" * 10,
+    ]
 
     for i, opp in enumerate(opportunities, 1):
-        lines.append(f"\n{i}️⃣ {opp.get('job_title', 'Unknown')}")
-        lines.append(f"🏢 Company: {opp.get('company', 'Unknown')}")
-        lines.append(f"🎓 Eligible Batch: {', '.join(opp.get('eligible_batches', []))}")
+        batches = ", ".join(opp.eligible_batches)
 
-        if opp.get("location") and opp["location"] != "Not specified":
-            lines.append(f"📍 Location: {opp['location']}")
+        lines.append("")
+        lines.append(f"{i}️⃣ {opp.job_title}")
+        lines.append(f"")
+        lines.append(f"Company: {opp.company}")
+        lines.append(f"")
+        lines.append(f"Eligible Batch: {batches if batches else 'Not specified'}")
+        lines.append(f"")
+        lines.append(f"Apply: {opp.application_link if opp.application_link else 'Not available'}")
+        lines.append("")
+        lines.append("─" * 10)
 
-        if opp.get("stipend") and opp["stipend"] != "Not specified":
-            lines.append(f"💰 Stipend: {opp['stipend']}")
-
-        if opp.get("deadline") and opp["deadline"] != "Not specified":
-            lines.append(f"⏰ Deadline: {opp['deadline']}")
-
-        link = opp.get("application_link", "")
-        if link and link != "Not mentioned":
-            lines.append(f"🔗 Apply: {link}")
-
-        lines.append("─" * 20)
-
-    lines.append(f"\n🎬 Video: {video_url}")
+    lines.append("")
+    lines.append(f"Video URL: https://youtube.com/watch?v={video_id}")
     return "\n".join(lines)
 
 
-def send_telegram(message: str) -> bool:
+def filter_opportunities(opportunities: list[Opportunity]) -> list[Opportunity]:
+    return [
+        opp
+        for opp in opportunities
+        if opp.confidence.lower() in CONFIDENCE_FILTER
+        and opp.application_link
+        and opp.job_title
+    ]
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(requests.RequestException),
+    reraise=True,
+)
+def _send_request(message: str) -> bool:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
-        "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }
+    response = requests.post(url, json=payload, timeout=30)
+    response.raise_for_status()
+    return True
 
+
+def send_telegram(message: str) -> bool:
     try:
-        response = requests.post(url, json=payload, timeout=30)
-        if response.status_code == 200:
-            print("Telegram notification sent successfully")
-            return True
-        else:
-            print(f"Telegram error: {response.status_code} - {response.text}")
-            return False
+        _send_request(message)
+        logger.info("Telegram notification sent successfully")
+        return True
     except Exception as e:
-        print(f"Telegram send error: {e}")
+        logger.error("Telegram send error: %s", e)
         return False
