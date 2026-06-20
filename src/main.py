@@ -7,6 +7,7 @@ from .youtube_api import get_video_description
 from .transcript import get_transcript
 from .extractor import extract_opportunities
 from .telegram import filter_opportunities, send_telegram
+from .state import load_state, save_state
 
 
 def run() -> None:
@@ -16,6 +17,7 @@ def run() -> None:
     logger = logging.getLogger(__name__)
 
     channels = load_channels()
+    state = load_state()
 
     for channel in channels:
         channel_id = channel["channel_id"]
@@ -29,6 +31,11 @@ def run() -> None:
             continue
 
         video_id = video["video_id"]
+
+        if state.get(channel_id) == video_id:
+            logger.info("Already processed %s, skipping", video_id)
+            continue
+
         logger.info("Processing latest: %s", video["title"])
 
         description_data = get_video_description(video_id)
@@ -58,6 +65,8 @@ def run() -> None:
         channel_title = description_data.get("channel_name", channel_name)
 
         if send_telegram(filtered, channel_title, video["title"], video_id):
+            state[channel_id] = video_id
+            save_state(state)
             logger.info("Telegram notification sent for %s", video_id)
         else:
             logger.warning("Failed to send Telegram notification for %s", video_id)
