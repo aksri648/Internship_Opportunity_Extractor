@@ -18,8 +18,6 @@ def _format_opportunity(i: int, opp: Opportunity) -> str:
     return (
         f"\n{i}️⃣ {opp.job_title}\n"
         f"\n"
-        f"Company: {opp.company}\n"
-        f"\n"
         f"Eligible Batch: {batches if batches else 'Not specified'}\n"
         f"\n"
         f"Apply: {link}\n"
@@ -61,13 +59,15 @@ def _build_messages(
 
 
 def filter_opportunities(opportunities: list[Opportunity]) -> list[Opportunity]:
-    return [
-        opp
-        for opp in opportunities
-        if opp.confidence.lower() in CONFIDENCE_FILTER
-        and opp.application_link
-        and opp.job_title
-    ]
+    seen = set()
+    unique = []
+    for opp in opportunities:
+        key = (opp.job_title.lower(), opp.company.lower())
+        if key not in seen:
+            seen.add(key)
+            if opp.confidence.lower() in CONFIDENCE_FILTER and opp.application_link and opp.job_title:
+                unique.append(opp)
+    return unique
 
 
 def _get_chat_id() -> int:

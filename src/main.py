@@ -31,54 +31,46 @@ def run() -> None:
             logger.info("No new videos for %s", channel_name)
             continue
 
-        logger.info("Found %d new video(s)", len(new_videos))
+        video = new_videos[0]
+        video_id = video["video_id"]
+        logger.info("Processing latest: %s", video["title"])
 
-        for video in new_videos:
-            video_id = video["video_id"]
-            logger.info("Processing: %s", video["title"])
+        description_data = get_video_description(video_id)
+        if not description_data:
+            logger.warning("Skipping %s - description fetch failed", video_id)
+            continue
 
-            description_data = get_video_description(video_id)
-            if not description_data:
-                logger.warning("Skipping %s - description fetch failed", video_id)
-                continue
+        transcript = get_transcript(video_id)
 
-            logger.info("Description retrieved for %s", video_id)
+        opportunities = extract_opportunities(
+            title=description_data["title"],
+            description=description_data["description"],
+            transcript=transcript,
+        )
 
-            transcript = get_transcript(video_id)
-            if transcript:
-                logger.info("Transcript retrieved for %s", video_id)
-            else:
-                logger.warning("No transcript available for %s", video_id)
+        if not opportunities:
+            logger.info("No opportunities found in video %s", video_id)
+            state[channel_id] = video_id
+            save_state(state)
+            continue
 
-            opportunities = extract_opportunities(
-                title=description_data["title"],
-                description=description_data["description"],
-                transcript=transcript,
-            )
+        filtered = filter_opportunities(opportunities)
+        if not filtered:
+            logger.info("No valid opportunities after filtering for %s", video_id)
+            state[channel_id] = video_id
+            save_state(state)
+            continue
 
-            if not opportunities:
-                logger.info("No opportunities found in video %s", video_id)
-                continue
+        logger.info("Found %d valid opportunity(ies)", len(filtered))
 
-            logger.info("Extracted %d opportunity(ies) from %s", len(opportunities), video_id)
+        channel_title = description_data.get("channel_name", channel_name)
 
-            filtered = filter_opportunities(opportunities)
-            if not filtered:
-                logger.info("No valid opportunities after filtering for %s", video_id)
-                continue
-
-            logger.info("Found %d valid opportunity(ies)", len(filtered))
-
-            channel_title = description_data.get("channel_name", channel_name)
-
-            if send_telegram(filtered, channel_title, video["title"], video_id):
-                state[channel_id] = video_id
-                save_state(state)
-                logger.info("State updated to %s", video_id)
-            else:
-                logger.warning(
-                    "Failed to send Telegram notification, skipping state update"
-                )
+        if send_telegram(filtered, channel_title, video["title"], video_id):
+            state[channel_id] = video_id
+            save_state(state)
+            logger.info("State updated to %s", video_id)
+        else:
+            logger.warning("Failed to send Telegram notification, skipping state update")
 
     logger.info("Run complete")
 
