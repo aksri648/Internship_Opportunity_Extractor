@@ -18,6 +18,8 @@ def _format_opportunity(i: int, opp: Opportunity) -> str:
     return (
         f"\n{i}️⃣ {opp.job_title}\n"
         f"\n"
+        f"Company: {opp.company}\n"
+        f"\n"
         f"Eligible Batch: {batches if batches else 'Not specified'}\n"
         f"\n"
         f"Apply: {link}\n"
