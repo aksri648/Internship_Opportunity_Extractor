@@ -5,7 +5,7 @@ from groq import Groq
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from .config import GROQ_API_KEY, GROQ_MODEL
-from .models import ExtractionResult, Opportunity
+from .models import Opportunity
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,24 @@ Rules:
 - Ignore affiliate links.
 - Ignore unrelated URLs.
 
-Return valid JSON matching the schema exactly."""
+CRITICAL: You MUST return a JSON object with an "opportunities" key containing a list.
+Example valid response:
+{"opportunities": [{"job_title": "...", "company": "...", "eligible_batches": ["2026"], "application_link": "...", "confidence": "high"}]}
+
+If no opportunities found, return: {"opportunities": []}
+
+Return ONLY valid JSON matching this exact schema."""
+
+
+def _normalize_response(data) -> list[dict]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        if "opportunities" in data and isinstance(data["opportunities"], list):
+            return data["opportunities"]
+        if "job_title" in data or "company" in data:
+            return [data]
+    return []
 
 
 @retry(
@@ -52,7 +69,7 @@ Return valid JSON matching the schema exactly."""
     retry=retry_if_exception_type(Exception),
     reraise=True,
 )
-def _call_llm(content: str) -> dict:
+def _call_llm(content: str) -> list[dict]:
     response = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[
@@ -63,20 +80,24 @@ def _call_llm(content: str) -> dict:
         max_tokens=4096,
         response_format={"type": "json_object"},
     )
-    return json.loads(response.choices[0].message.content)
+    raw = json.loads(response.choices[0].message.content)
+    return _normalize_response(raw)
 
 
 def extract_opportunities(title: str, description: str, transcript: str) -> list[Opportunity]:
     content = f"Video Title: {title}\n\nDescription: {description[:3000]}\n\nTranscript: {transcript[:5000]}"
 
     try:
-        result = _call_llm(content)
-        extraction = ExtractionResult(**result)
-        return [
-            opp
-            for opp in extraction.opportunities
-            if opp.job_title and opp.company
-        ]
+        items = _call_llm(content)
+        results = []
+        for item in items:
+            try:
+                opp = Opportunity(**item)
+                if opp.job_title and opp.company:
+                    results.append(opp)
+            except Exception as e:
+                logger.warning("Skipping malformed opportunity: %s", e)
+        return results
 
     except json.JSONDecodeError as e:
         logger.error("Failed to parse LLM response as JSON: %s", e)
